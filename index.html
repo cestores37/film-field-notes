@@ -325,7 +325,7 @@
     <button class="add-roll-btn" id="addRollBtn">+ Add New Roll</button>
 
     <div class="search-row">
-      <input class="text-input" type="text" id="searchInput" placeholder="Search rolls by nickname...">
+      <input class="text-input" type="text" id="searchInput" placeholder="Search by nickname or notes...">
       <div class="filter-pills" id="statusPills">
         <div class="pill active" data-status="all">All</div>
         <div class="pill" data-status="active">Active</div>
@@ -535,7 +535,7 @@ import {
   getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, onSnapshot,
+  getFirestore, collection, collectionGroup, doc, addDoc, updateDoc, onSnapshot,
   query, orderBy, serverTimestamp, Timestamp, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -599,16 +599,20 @@ document.getElementById('signOutBtn').addEventListener('click', ()=> signOut(aut
 let currentUid = null;
 let unsubRolls = null;
 let unsubEntries = null;
+let unsubAllEntries = null;
 
 onAuthStateChanged(auth, (user)=>{
   if(user){
     currentUid = user.uid;
     showView(homeView);
     listenToRolls();
+    listenToAllEntriesForSearch();
   } else {
     currentUid = null;
     if(unsubRolls){ unsubRolls(); unsubRolls=null; }
     if(unsubEntries){ unsubEntries(); unsubEntries=null; }
+    if(unsubAllEntries){ unsubAllEntries(); unsubAllEntries=null; }
+    entryNotesByRoll = new Map();
     showView(loginView);
   }
 });
@@ -619,12 +623,37 @@ let statusFilter = 'all';
 let sortMode = 'created-desc';
 let searchTerm = '';
 
+// rollId -> lowercase concatenated notes text, used so the search box can also
+// match anything typed in a shot's notes, not just the roll nickname
+let entryNotesByRoll = new Map();
+
 function listenToRolls(){
   const rollsRef = collection(db, 'users', currentUid, 'rolls');
   const q = query(rollsRef, orderBy('createdAt', 'desc'));
   unsubRolls = onSnapshot(q, (snap)=>{
     allRolls = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     renderRollList();
+  });
+}
+
+function listenToAllEntriesForSearch(){
+  // collectionGroup matches the "entries" subcollection under every roll;
+  // Firestore's security rules still restrict this to the signed-in user's
+  // own documents, since each entry's full path still starts with users/{uid}/...
+  const cg = collectionGroup(db, 'entries');
+  unsubAllEntries = onSnapshot(cg, (snap)=>{
+    const map = new Map();
+    snap.docs.forEach(d=>{
+      const notes = (d.data().notes || '').toLowerCase().trim();
+      if(!notes) return;
+      const rollId = d.ref.parent.parent.id;
+      const existing = map.get(rollId) || '';
+      map.set(rollId, existing + ' ' + notes);
+    });
+    entryNotesByRoll = map;
+    renderRollList();
+  }, ()=>{
+    // if this listener can't run for any reason, search still works on nickname alone
   });
 }
 
@@ -661,7 +690,11 @@ function renderRollList(){
   const emptyEl = document.getElementById('emptyState');
 
   let rolls = allRolls.filter(r=>{
-    if(searchTerm && !(r.nickname||'').toLowerCase().includes(searchTerm)) return false;
+    if(searchTerm){
+      const nameMatch = (r.nickname||'').toLowerCase().includes(searchTerm);
+      const notesMatch = (entryNotesByRoll.get(r.id) || '').includes(searchTerm);
+      if(!nameMatch && !notesMatch) return false;
+    }
     const finished = !!r.completedAt;
     if(statusFilter==='active' && finished) return false;
     if(statusFilter==='finished' && !finished) return false;
