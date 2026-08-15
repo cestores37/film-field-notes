@@ -105,6 +105,25 @@
   }
   .roll-card .rc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:0.6rem;}
   .roll-card .rc-name{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;color:var(--paper);}
+  .rc-top-actions{display:flex;align-items:center;gap:0.4rem;flex:0 0 auto;}
+  .rc-menu-btn{
+    background:var(--panel-raised);border:1px solid var(--hairline);color:var(--paper-dim);
+    width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-size:1rem;line-height:1;flex:0 0 auto;
+  }
+  .action-list{display:flex;flex-direction:column;gap:0.6rem;}
+  .action-item{
+    width:100%;background:var(--panel-raised);border:1px solid var(--hairline);color:var(--paper);
+    padding:0.8rem 0.95rem;border-radius:8px;font-size:0.92rem;text-align:left;font-weight:500;
+  }
+  .action-item.danger{color:var(--safelight);}
+  .delete-warning{color:var(--paper-dim);font-size:0.88rem;line-height:1.5;margin:0.2rem 0 0.2rem;}
+  .delete-warning b{color:var(--paper);}
+  .btn-danger{
+    width:100%;background:var(--safelight);color:var(--charcoal);border:none;border-radius:8px;
+    padding:0.75rem;font-size:0.95rem;font-weight:600;margin-top:1rem;
+  }
+  .btn-danger:disabled{opacity:0.4;}
   .status-badge{
     font-family:'IBM Plex Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;
     padding:0.22rem 0.55rem;border-radius:12px;flex:0 0 auto;white-space:nowrap;
@@ -329,7 +348,7 @@
 <div id="addRollModal" class="modal-overlay hidden">
   <div class="modal-card">
     <div class="modal-head">
-      <h2>Add New Roll</h2>
+      <h2 id="addRollModalTitle">Add New Roll</h2>
       <button class="modal-close" id="closeModalBtn">×</button>
     </div>
 
@@ -379,6 +398,34 @@
   </div>
 </div>
 
+<!-- ============ ROLL ACTIONS SHEET (edit/delete) ============ -->
+<div id="rollActionsModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="rollActionsTitle">Roll Options</h2>
+      <button class="modal-close" id="closeRollActionsBtn">×</button>
+    </div>
+    <div class="action-list">
+      <button class="action-item" id="editRollActionBtn">Edit Roll</button>
+      <button class="action-item danger" id="deleteRollActionBtn">Delete Roll</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DELETE CONFIRMATION ============ -->
+<div id="deleteConfirmModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Delete Roll?</h2>
+      <button class="modal-close" id="closeDeleteConfirmBtn">×</button>
+    </div>
+    <p class="delete-warning">This permanently deletes "<b id="deleteRollName"></b>" and every shot logged on it. This can't be undone.</p>
+    <button class="btn-danger" id="confirmDeleteBtn">Delete Permanently</button>
+    <button class="btn-secondary" id="cancelDeleteBtn" style="margin-top:0.6rem;">Cancel</button>
+    <div class="error-msg" id="deleteModalError"></div>
+  </div>
+</div>
+
 <!-- ============ SWAP FILM MODAL ============ -->
 <div id="swapFilmModal" class="modal-overlay hidden">
   <div class="modal-card">
@@ -388,8 +435,11 @@
     </div>
 
     <div class="field">
-      <label for="swapLastShotInput">Current last shot on the roll</label>
-      <input class="text-input" type="number" inputmode="numeric" pattern="[0-9]*" id="swapLastShotInput" min="0">
+      <label>Current last shot on the roll</label>
+      <div class="wheel-picker" id="swapShotWheel">
+        <div class="wheel-track" id="swapShotWheelTrack"></div>
+        <div class="wheel-highlight"></div>
+      </div>
     </div>
 
     <button class="btn-mint" id="confirmSwapBtn">Swap Film</button>
@@ -486,7 +536,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, updateDoc, onSnapshot,
-  query, orderBy, serverTimestamp, Timestamp
+  query, orderBy, serverTimestamp, Timestamp, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // ======================================================
@@ -648,7 +698,10 @@ function renderRollList(){
     card.innerHTML = `
       <div class="rc-top">
         <span class="rc-name">${escapeHtml(r.nickname||'Untitled roll')}</span>
-        <span class="status-badge ${finished?'finished':'active'}">${finished?'Finished':'Active'}</span>
+        <div class="rc-top-actions">
+          <span class="status-badge ${finished?'finished':'active'}">${finished?'Finished':'Active'}</span>
+          <button class="rc-menu-btn" data-roll-id="${r.id}">⋯</button>
+        </div>
       </div>
       <div class="rc-tags">
         <span class="tag">ISO ${r.iso||'—'}</span>
@@ -663,6 +716,10 @@ function renderRollList(){
       <div class="rc-dates">Started ${fmtDate(tsToDate(r.createdAt))}${finished ? ' · Finished '+fmtDate(tsToDate(r.completedAt)) : ''}</div>
     `;
     card.addEventListener('click', ()=> openRoll(r.id));
+    card.querySelector('.rc-menu-btn').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openRollActions(r);
+    });
     listEl.appendChild(card);
   });
 }
@@ -673,31 +730,58 @@ function escapeHtml(str){
   return d.innerHTML;
 }
 
-// ---------- add new roll modal ----------
+// ---------- add / edit roll modal ----------
 const addRollModal = document.getElementById('addRollModal');
-document.getElementById('addRollBtn').addEventListener('click', openModal);
+document.getElementById('addRollBtn').addEventListener('click', ()=> openModal(null));
 document.getElementById('closeModalBtn').addEventListener('click', closeModal);
 addRollModal.addEventListener('click', (e)=>{ if(e.target===addRollModal) closeModal(); });
 
 let modalIso = 200;
 let modalType = 'color';
 let modalShots = 36;
+let editingRollId = null;
 
-function openModal(){
-  document.getElementById('rollNickname').value = '';
+function openModal(rollToEdit){
+  editingRollId = rollToEdit ? rollToEdit.id : null;
   document.getElementById('modalError').textContent = '';
   document.getElementById('customShots').classList.add('hidden');
   document.getElementById('customShots').value = '';
-  modalIso = 200; modalType = 'color'; modalShots = 36;
-  document.querySelectorAll('#isoChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.iso==='200'));
-  document.querySelectorAll('#shotChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.shots==='36'));
-  document.getElementById('colorBtn').classList.add('active');
-  document.getElementById('bwBtn').classList.remove('active');
-  document.getElementById('createdDateDisplay').textContent = fmtDate(new Date());
+
+  if(rollToEdit){
+    document.getElementById('addRollModalTitle').textContent = 'Edit Roll';
+    document.getElementById('createRollBtn').textContent = 'Save Changes';
+    document.getElementById('rollNickname').value = rollToEdit.nickname || '';
+    modalIso = rollToEdit.iso;
+    modalType = rollToEdit.filmType;
+    modalShots = rollToEdit.totalShots;
+    const presetShots = ['12','24','36'];
+    document.querySelectorAll('#isoChips .chip').forEach(c=>c.classList.toggle('active', Number(c.dataset.iso)===modalIso));
+    if(presetShots.includes(String(modalShots))){
+      document.querySelectorAll('#shotChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.shots===String(modalShots)));
+    } else {
+      document.querySelectorAll('#shotChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.shots==='custom'));
+      document.getElementById('customShots').classList.remove('hidden');
+      document.getElementById('customShots').value = modalShots;
+    }
+    document.getElementById('colorBtn').classList.toggle('active', modalType==='color');
+    document.getElementById('bwBtn').classList.toggle('active', modalType==='bw');
+    document.getElementById('createdDateDisplay').textContent = fmtDate(tsToDate(rollToEdit.createdAt));
+  } else {
+    document.getElementById('addRollModalTitle').textContent = 'Add New Roll';
+    document.getElementById('createRollBtn').textContent = 'Create Roll';
+    document.getElementById('rollNickname').value = '';
+    modalIso = 200; modalType = 'color'; modalShots = 36;
+    document.querySelectorAll('#isoChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.iso==='200'));
+    document.querySelectorAll('#shotChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.shots==='36'));
+    document.getElementById('colorBtn').classList.add('active');
+    document.getElementById('bwBtn').classList.remove('active');
+    document.getElementById('createdDateDisplay').textContent = fmtDate(new Date());
+  }
+
   addRollModal.classList.remove('hidden');
   setTimeout(()=>document.getElementById('rollNickname').focus(), 50);
 }
-function closeModal(){ addRollModal.classList.add('hidden'); }
+function closeModal(){ addRollModal.classList.add('hidden'); editingRollId = null; }
 
 document.querySelectorAll('#isoChips .chip').forEach(chip=>{
   chip.addEventListener('click', ()=>{
@@ -742,18 +826,127 @@ document.getElementById('createRollBtn').addEventListener('click', async ()=>{
   if(!modalShots || modalShots < 1){ errEl.textContent = 'Enter a valid number of shots.'; return; }
   errEl.textContent = '';
   try{
-    const rollsRef = collection(db, 'users', currentUid, 'rolls');
-    await addDoc(rollsRef, {
-      nickname, iso: modalIso, filmType: modalType, totalShots: modalShots,
-      loggedShots: 0, createdAt: serverTimestamp(), completedAt: null
-    });
+    if(editingRollId){
+      const rollDocRef = doc(db, 'users', currentUid, 'rolls', editingRollId);
+      await updateDoc(rollDocRef, {
+        nickname, iso: modalIso, filmType: modalType, totalShots: modalShots
+      });
+    } else {
+      const rollsRef = collection(db, 'users', currentUid, 'rolls');
+      await addDoc(rollsRef, {
+        nickname, iso: modalIso, filmType: modalType, totalShots: modalShots,
+        loggedShots: 0, createdAt: serverTimestamp(), completedAt: null
+      });
+    }
     closeModal();
   }catch(e){
-    errEl.textContent = 'Could not create roll. Try again.';
+    errEl.textContent = editingRollId ? 'Could not save changes. Try again.' : 'Could not create roll. Try again.';
+  }
+});
+
+// ---------- roll actions (edit / delete) ----------
+const rollActionsModal = document.getElementById('rollActionsModal');
+const deleteConfirmModal = document.getElementById('deleteConfirmModal');
+let actionsRoll = null; // the roll currently targeted by the actions sheet / delete confirm
+
+function openRollActions(roll){
+  actionsRoll = roll;
+  document.getElementById('rollActionsTitle').textContent = roll.nickname || 'Roll Options';
+  rollActionsModal.classList.remove('hidden');
+}
+document.getElementById('closeRollActionsBtn').addEventListener('click', ()=> rollActionsModal.classList.add('hidden'));
+rollActionsModal.addEventListener('click', (e)=>{ if(e.target===rollActionsModal) rollActionsModal.classList.add('hidden'); });
+
+document.getElementById('editRollActionBtn').addEventListener('click', ()=>{
+  rollActionsModal.classList.add('hidden');
+  if(actionsRoll) openModal(actionsRoll);
+});
+
+document.getElementById('deleteRollActionBtn').addEventListener('click', ()=>{
+  rollActionsModal.classList.add('hidden');
+  if(!actionsRoll) return;
+  document.getElementById('deleteRollName').textContent = actionsRoll.nickname || 'this roll';
+  document.getElementById('deleteModalError').textContent = '';
+  deleteConfirmModal.classList.remove('hidden');
+});
+document.getElementById('closeDeleteConfirmBtn').addEventListener('click', ()=> deleteConfirmModal.classList.add('hidden'));
+document.getElementById('cancelDeleteBtn').addEventListener('click', ()=> deleteConfirmModal.classList.add('hidden'));
+deleteConfirmModal.addEventListener('click', (e)=>{ if(e.target===deleteConfirmModal) deleteConfirmModal.classList.add('hidden'); });
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async ()=>{
+  if(!actionsRoll) return;
+  const btn = document.getElementById('confirmDeleteBtn');
+  const errEl = document.getElementById('deleteModalError');
+  btn.disabled = true;
+  errEl.textContent = '';
+  try{
+    // Firestore doesn't cascade-delete subcollections, so clear out the
+    // roll's logged entries first, then remove the roll document itself.
+    const entriesRef = collection(db, 'users', currentUid, 'rolls', actionsRoll.id, 'entries');
+    const entrySnap = await getDocs(entriesRef);
+    await Promise.all(entrySnap.docs.map(d => deleteDoc(d.ref)));
+    const rollDocRef = doc(db, 'users', currentUid, 'rolls', actionsRoll.id);
+    await deleteDoc(rollDocRef);
+    deleteConfirmModal.classList.add('hidden');
+    actionsRoll = null;
+  }catch(e){
+    errEl.textContent = 'Could not delete this roll. Try again.';
+  }finally{
+    btn.disabled = false;
   }
 });
 
 // ---------- roll detail view ----------
+const WHEEL_ITEM_H = 40;
+
+// Generic dial/wheel picker. Returns a handle with .getValue() and .rebuild(values, initialValue).
+function createWheelPicker(trackEl, onChange){
+  let values = [];
+  let selected = null;
+  let snapTimeout = null;
+
+  function scrollToIndex(idx, behavior){
+    trackEl.scrollTo({ top: idx * WHEEL_ITEM_H, behavior: behavior || 'smooth' });
+  }
+
+  function setSelectedIndex(idx){
+    const clamped = Math.max(0, Math.min(values.length-1, idx));
+    selected = values[clamped];
+    Array.from(trackEl.children).forEach((el, i)=>{
+      el.classList.toggle('selected', i===clamped);
+    });
+    if(onChange) onChange(selected);
+  }
+
+  trackEl.addEventListener('scroll', ()=>{
+    const idx = Math.round(trackEl.scrollTop / WHEEL_ITEM_H);
+    setSelectedIndex(idx);
+    clearTimeout(snapTimeout);
+    snapTimeout = setTimeout(()=>{
+      const settledIdx = Math.round(trackEl.scrollTop / WHEEL_ITEM_H);
+      scrollToIndex(settledIdx);
+      setSelectedIndex(settledIdx);
+    }, 90);
+  });
+
+  function rebuild(newValues, initialValue){
+    values = newValues;
+    trackEl.innerHTML = '';
+    values.forEach((v, i)=>{
+      const item = document.createElement('div');
+      item.className = 'wheel-item';
+      item.textContent = v;
+      item.addEventListener('click', ()=> scrollToIndex(i));
+      trackEl.appendChild(item);
+    });
+    const startIdx = initialValue!=null ? Math.max(0, values.indexOf(initialValue)) : 0;
+    scrollToIndex(startIdx, 'auto');
+    setSelectedIndex(startIdx);
+  }
+
+  return { rebuild, getValue: ()=> selected };
+}
+
 let currentRoll = null;
 let currentEntries = [];
 
@@ -791,28 +984,29 @@ function openRoll(rollId){
 
 // ---------- swap film ----------
 const swapFilmModal = document.getElementById('swapFilmModal');
-const swapLastShotInput = document.getElementById('swapLastShotInput');
 const swapModalError = document.getElementById('swapModalError');
 const confirmSwapBtn = document.getElementById('confirmSwapBtn');
 const rewindModal = document.getElementById('rewindModal');
 
+const swapShotWheel = createWheelPicker(document.getElementById('swapShotWheelTrack'), null);
+
 document.getElementById('swapFilmBtn').addEventListener('click', ()=>{
   if(!currentRoll) return;
   swapModalError.textContent = '';
-  swapLastShotInput.value = currentRoll.loggedShots || 0;
-  swapLastShotInput.min = 0;
-  swapLastShotInput.max = currentRoll.totalShots;
+  const current = currentRoll.loggedShots || 0;
+  const values = [];
+  for(let v=current; v<=currentRoll.totalShots; v++) values.push(v);
+  swapShotWheel.rebuild(values, current);
   swapFilmModal.classList.remove('hidden');
-  setTimeout(()=> swapLastShotInput.focus(), 50);
 });
 document.getElementById('closeSwapModalBtn').addEventListener('click', ()=> swapFilmModal.classList.add('hidden'));
 swapFilmModal.addEventListener('click', (e)=>{ if(e.target===swapFilmModal) swapFilmModal.classList.add('hidden'); });
 
 confirmSwapBtn.addEventListener('click', async ()=>{
   if(!currentRoll) return;
-  const val = Number(swapLastShotInput.value);
-  if(!Number.isInteger(val) || val < 0 || val > currentRoll.totalShots){
-    swapModalError.textContent = `Enter a shot number between 0 and ${currentRoll.totalShots}.`;
+  const val = swapShotWheel.getValue();
+  if(val==null || val < 0 || val > currentRoll.totalShots){
+    swapModalError.textContent = `Pick a shot number up to ${currentRoll.totalShots}.`;
     return;
   }
   swapModalError.textContent = '';
@@ -865,66 +1059,30 @@ function renderEntries(){
 
 // ---------- sticky entry form ----------
 const shotStartLabel = document.getElementById('shotStartLabel');
-const shotEndWheelTrack = document.getElementById('shotEndWheelTrack');
 const commitBtn = document.getElementById('commitBtn');
 const notesInput = document.getElementById('notesInput');
-
-const WHEEL_ITEM_H = 40;
-let wheelValues = [];
-let selectedShotEnd = null;
-let wheelSnapTimeout = null;
 
 function nextShotStart(){
   return currentRoll ? (currentRoll.loggedShots||0) + 1 : 1;
 }
 
+const shotEndWheel = createWheelPicker(document.getElementById('shotEndWheelTrack'), (val)=>{
+  updateCommitButtonLabel(val);
+});
+
 function buildShotEndWheel(){
   const start = nextShotStart();
   const total = currentRoll.totalShots;
-  wheelValues = [];
-  shotEndWheelTrack.innerHTML = '';
-  for(let v=start; v<=total; v++){
-    wheelValues.push(v);
-    const item = document.createElement('div');
-    item.className = 'wheel-item';
-    item.textContent = v;
-    item.addEventListener('click', ()=> scrollWheelToIndex(wheelValues.indexOf(v)));
-    shotEndWheelTrack.appendChild(item);
-  }
-  shotEndWheelTrack.scrollTop = 0;
-  setSelectedWheelIndex(0);
+  const values = [];
+  for(let v=start; v<=total; v++) values.push(v);
+  shotEndWheel.rebuild(values, start);
 }
 
-function scrollWheelToIndex(idx){
-  shotEndWheelTrack.scrollTo({ top: idx * WHEEL_ITEM_H, behavior:'smooth' });
-}
-
-function setSelectedWheelIndex(idx){
-  const clamped = Math.max(0, Math.min(wheelValues.length-1, idx));
-  selectedShotEnd = wheelValues[clamped];
-  Array.from(shotEndWheelTrack.children).forEach((el, i)=>{
-    el.classList.toggle('selected', i===clamped);
-  });
-  updateCommitButtonLabel();
-}
-
-function updateCommitButtonLabel(){
-  const isLastShot = currentRoll && selectedShotEnd === currentRoll.totalShots;
+function updateCommitButtonLabel(selectedVal){
+  const val = selectedVal!=null ? selectedVal : shotEndWheel.getValue();
+  const isLastShot = currentRoll && val === currentRoll.totalShots;
   commitBtn.textContent = isLastShot ? 'Commit & Finish Roll' : 'Commit Settings';
 }
-
-shotEndWheelTrack.addEventListener('scroll', ()=>{
-  // live-update which item looks selected while dragging
-  const idx = Math.round(shotEndWheelTrack.scrollTop / WHEEL_ITEM_H);
-  setSelectedWheelIndex(idx);
-  // snap-correct once scrolling has settled
-  clearTimeout(wheelSnapTimeout);
-  wheelSnapTimeout = setTimeout(()=>{
-    const settledIdx = Math.round(shotEndWheelTrack.scrollTop / WHEEL_ITEM_H);
-    scrollWheelToIndex(settledIdx);
-    setSelectedWheelIndex(settledIdx);
-  }, 90);
-});
 
 const msIsoSlider = document.getElementById('msIso');
 const msApSlider = document.getElementById('msAp');
@@ -977,7 +1135,7 @@ function refreshEntryFormState(){
 
 commitBtn.addEventListener('click', async ()=>{
   const start = nextShotStart();
-  const end = selectedShotEnd;
+  const end = shotEndWheel.getValue();
   if(!end || end < start || end > currentRoll.totalShots) return;
 
   commitBtn.disabled = true;
