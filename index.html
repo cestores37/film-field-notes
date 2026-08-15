@@ -21,6 +21,8 @@
     --safelight:#e8592b;
     --safelight-dim:#a8432a;
     --sage:#8ba07d;
+    --mint:#8fe3c0;
+    --mint-dim:#6fc7a3;
     --metal:#8a8479;
     --hairline:#3a352f;
   }
@@ -155,6 +157,27 @@
   .detail-title{flex:1;min-width:0;}
   .detail-title .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.15rem;color:var(--paper);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .detail-title .meta{font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--metal);margin-top:0.1rem;}
+
+  .swap-film-btn{
+    background:var(--mint);color:var(--charcoal);border:none;border-radius:8px;
+    font-family:'IBM Plex Mono',monospace;font-size:0.7rem;font-weight:600;letter-spacing:0.03em;
+    padding:0.55rem 0.8rem;flex:0 0 auto;white-space:nowrap;
+  }
+  .swap-film-btn:active{background:var(--mint-dim);}
+
+  .btn-mint{
+    width:100%;background:var(--mint);color:var(--charcoal);border:none;border-radius:8px;
+    padding:0.75rem;font-size:0.95rem;font-weight:600;margin-top:0.4rem;
+  }
+  .btn-mint:active{background:var(--mint-dim);}
+  .btn-mint:disabled{opacity:0.4;}
+
+  .rewind-card{text-align:center;padding:0.6rem 0.4rem 0.3rem;}
+  .rewind-card .rw-title{font-family:'Fraunces',serif;font-weight:700;font-size:1.35rem;color:var(--mint);}
+  .rewind-card .rw-sub{font-size:0.85rem;color:var(--paper-dim);margin-top:0.5rem;line-height:1.5;}
+  .rewind-card .btn-mint{margin-top:1.4rem;}
+
+  .tag.swap-tag{color:var(--mint);border-color:rgba(143,227,192,0.35);}
 
   .sticky-entry{
     position:sticky;top:0;z-index:20;background:var(--charcoal);
@@ -356,6 +379,35 @@
   </div>
 </div>
 
+<!-- ============ SWAP FILM MODAL ============ -->
+<div id="swapFilmModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Swap Film</h2>
+      <button class="modal-close" id="closeSwapModalBtn">×</button>
+    </div>
+
+    <div class="field">
+      <label for="swapLastShotInput">Current last shot on the roll</label>
+      <input class="text-input" type="number" inputmode="numeric" pattern="[0-9]*" id="swapLastShotInput" min="0">
+    </div>
+
+    <button class="btn-mint" id="confirmSwapBtn">Swap Film</button>
+    <div class="error-msg" id="swapModalError"></div>
+  </div>
+</div>
+
+<!-- ============ BE KIND, REWIND MODAL ============ -->
+<div id="rewindModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="rewind-card">
+      <div class="rw-title">Be Kind, Rewind!</div>
+      <div class="rw-sub">This roll's been pulled from the camera. Load it back in whenever you're ready to pick up where you left off.</div>
+      <button class="btn-mint" id="rewindHomeBtn">Back to Home</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ ROLL DETAIL VIEW ============ -->
 <div id="detailView" class="hidden">
   <div class="detail-header">
@@ -365,6 +417,7 @@
         <div class="name" id="detailName">—</div>
         <div class="meta" id="detailMeta">—</div>
       </div>
+      <button class="swap-film-btn" id="swapFilmBtn">Swap Film</button>
     </div>
   </div>
 
@@ -601,6 +654,7 @@ function renderRollList(){
         <span class="tag">ISO ${r.iso||'—'}</span>
         <span class="tag">${r.filmType==='bw'?'B&W':'Color'}</span>
         <span class="tag">${total} shots</span>
+        ${r.swappedAt ? `<span class="tag swap-tag">Swapped ${fmtDate(tsToDate(r.swappedAt))}</span>` : ''}
       </div>
       <div class="rc-progress">
         <div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div>
@@ -703,10 +757,11 @@ document.getElementById('createRollBtn').addEventListener('click', async ()=>{
 let currentRoll = null;
 let currentEntries = [];
 
-document.getElementById('backBtn').addEventListener('click', ()=>{
+function returnToHome(){
   if(unsubEntries){ unsubEntries(); unsubEntries=null; }
   showView(homeView);
-});
+}
+document.getElementById('backBtn').addEventListener('click', returnToHome);
 
 function openRoll(rollId){
   const roll = allRolls.find(r=>r.id===rollId);
@@ -733,6 +788,56 @@ function openRoll(rollId){
     refreshEntryFormState();
   });
 }
+
+// ---------- swap film ----------
+const swapFilmModal = document.getElementById('swapFilmModal');
+const swapLastShotInput = document.getElementById('swapLastShotInput');
+const swapModalError = document.getElementById('swapModalError');
+const confirmSwapBtn = document.getElementById('confirmSwapBtn');
+const rewindModal = document.getElementById('rewindModal');
+
+document.getElementById('swapFilmBtn').addEventListener('click', ()=>{
+  if(!currentRoll) return;
+  swapModalError.textContent = '';
+  swapLastShotInput.value = currentRoll.loggedShots || 0;
+  swapLastShotInput.min = 0;
+  swapLastShotInput.max = currentRoll.totalShots;
+  swapFilmModal.classList.remove('hidden');
+  setTimeout(()=> swapLastShotInput.focus(), 50);
+});
+document.getElementById('closeSwapModalBtn').addEventListener('click', ()=> swapFilmModal.classList.add('hidden'));
+swapFilmModal.addEventListener('click', (e)=>{ if(e.target===swapFilmModal) swapFilmModal.classList.add('hidden'); });
+
+confirmSwapBtn.addEventListener('click', async ()=>{
+  if(!currentRoll) return;
+  const val = Number(swapLastShotInput.value);
+  if(!Number.isInteger(val) || val < 0 || val > currentRoll.totalShots){
+    swapModalError.textContent = `Enter a shot number between 0 and ${currentRoll.totalShots}.`;
+    return;
+  }
+  swapModalError.textContent = '';
+  confirmSwapBtn.disabled = true;
+  try{
+    const rollDocRef = doc(db, 'users', currentUid, 'rolls', currentRoll.id);
+    await updateDoc(rollDocRef, { loggedShots: val, swappedAt: serverTimestamp() });
+    // reflect immediately in the local roll object and sticky form,
+    // without waiting on the next Firestore round-trip
+    currentRoll.loggedShots = val;
+    currentRoll.swappedAt = { seconds: Math.floor(Date.now()/1000) };
+    refreshEntryFormState();
+    swapFilmModal.classList.add('hidden');
+    rewindModal.classList.remove('hidden');
+  }catch(e){
+    swapModalError.textContent = 'Could not save. Try again.';
+  }finally{
+    confirmSwapBtn.disabled = false;
+  }
+});
+
+document.getElementById('rewindHomeBtn').addEventListener('click', ()=>{
+  rewindModal.classList.add('hidden');
+  returnToHome();
+});
 
 function renderEntries(){
   const listEl = document.getElementById('entriesList');
@@ -800,6 +905,12 @@ function setSelectedWheelIndex(idx){
   Array.from(shotEndWheelTrack.children).forEach((el, i)=>{
     el.classList.toggle('selected', i===clamped);
   });
+  updateCommitButtonLabel();
+}
+
+function updateCommitButtonLabel(){
+  const isLastShot = currentRoll && selectedShotEnd === currentRoll.totalShots;
+  commitBtn.textContent = isLastShot ? 'Commit & Finish Roll' : 'Commit Settings';
 }
 
 shotEndWheelTrack.addEventListener('scroll', ()=>{
@@ -882,7 +993,11 @@ commitBtn.addEventListener('click', async ()=>{
       loggedAt: serverTimestamp()
     });
     const rollDocRef = doc(db, 'users', currentUid, 'rolls', currentRoll.id);
-    await updateDoc(rollDocRef, { loggedShots: end });
+    const rollUpdate = { loggedShots: end };
+    if(end === currentRoll.totalShots){
+      rollUpdate.completedAt = serverTimestamp();
+    }
+    await updateDoc(rollDocRef, rollUpdate);
     // Note: sliders intentionally keep their values — most consecutive shots
     // share the same settings. Only the shot range and notes reset.
   }catch(e){
