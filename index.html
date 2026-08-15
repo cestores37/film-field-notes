@@ -166,13 +166,26 @@
   .shot-range-row .sr-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--metal);}
   .shot-range-row .sr-num{font-size:1.5rem;color:var(--paper);font-weight:600;}
   .shot-range-row .sr-sep{font-size:1.1rem;color:var(--metal);}
-  .shot-end-input{
-    width:4.2rem;background:var(--panel-raised);border:1px solid var(--hairline);color:var(--paper);
-    font-family:'IBM Plex Mono',monospace;font-size:1.5rem;font-weight:600;text-align:center;border-radius:8px;
-    padding:0.2rem 0.1rem;outline:none;-moz-appearance:textfield;
+  .wheel-picker{
+    position:relative;width:5.6rem;height:126px;border-radius:10px;
+    background:var(--panel-raised);border:1px solid var(--hairline);overflow:hidden;
   }
-  .shot-end-input::-webkit-outer-spin-button, .shot-end-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-  .shot-end-input:focus{border-color:var(--safelight);}
+  .wheel-track{
+    height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;padding:43px 0;
+  }
+  .wheel-track::-webkit-scrollbar{display:none;}
+  .wheel-item{
+    height:40px;display:flex;align-items:center;justify-content:center;scroll-snap-align:center;
+    font-family:'IBM Plex Mono',monospace;color:var(--metal);font-size:1.1rem;font-weight:500;
+    transition:color 0.12s ease;
+  }
+  .wheel-item.selected{color:var(--paper);font-size:1.55rem;font-weight:600;}
+  .wheel-highlight{
+    position:absolute;top:50%;left:0;right:0;height:40px;transform:translateY(-50%);
+    border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);
+    background:rgba(232,89,43,0.07);pointer-events:none;
+  }
   .range-error{font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--safelight);margin:-0.5rem 0 0.7rem 0;min-height:1em;}
 
   .mini-slider{margin-bottom:0.95rem;}
@@ -364,9 +377,11 @@
           <span class="sr-label">Shot</span>
           <span class="sr-num" id="shotStartLabel">1</span>
           <span class="sr-sep">–</span>
-          <input type="number" inputmode="numeric" pattern="[0-9]*" class="shot-end-input" id="shotEndInput" placeholder="?" min="1">
+          <div class="wheel-picker" id="shotEndWheel">
+            <div class="wheel-track" id="shotEndWheelTrack"></div>
+            <div class="wheel-highlight"></div>
+          </div>
         </div>
-        <div class="range-error" id="rangeError"></div>
 
         <div class="mini-slider">
           <div class="ms-head"><span class="ms-name">ISO</span><span class="ms-val" id="msIsoVal">200</span></div>
@@ -385,6 +400,7 @@
         <textarea class="notes-field" id="notesInput" rows="2" placeholder="Lighting, subject, mood..."></textarea>
 
         <button class="commit-btn" id="commitBtn" disabled>Commit Settings</button>
+        <div class="range-error" id="commitError"></div>
       </div>
 
       <!-- Finish roll prompt (shown when all shots logged) -->
@@ -744,10 +760,60 @@ function renderEntries(){
 
 // ---------- sticky entry form ----------
 const shotStartLabel = document.getElementById('shotStartLabel');
-const shotEndInput = document.getElementById('shotEndInput');
-const rangeError = document.getElementById('rangeError');
+const shotEndWheelTrack = document.getElementById('shotEndWheelTrack');
 const commitBtn = document.getElementById('commitBtn');
 const notesInput = document.getElementById('notesInput');
+
+const WHEEL_ITEM_H = 40;
+let wheelValues = [];
+let selectedShotEnd = null;
+let wheelSnapTimeout = null;
+
+function nextShotStart(){
+  return currentRoll ? (currentRoll.loggedShots||0) + 1 : 1;
+}
+
+function buildShotEndWheel(){
+  const start = nextShotStart();
+  const total = currentRoll.totalShots;
+  wheelValues = [];
+  shotEndWheelTrack.innerHTML = '';
+  for(let v=start; v<=total; v++){
+    wheelValues.push(v);
+    const item = document.createElement('div');
+    item.className = 'wheel-item';
+    item.textContent = v;
+    item.addEventListener('click', ()=> scrollWheelToIndex(wheelValues.indexOf(v)));
+    shotEndWheelTrack.appendChild(item);
+  }
+  shotEndWheelTrack.scrollTop = 0;
+  setSelectedWheelIndex(0);
+}
+
+function scrollWheelToIndex(idx){
+  shotEndWheelTrack.scrollTo({ top: idx * WHEEL_ITEM_H, behavior:'smooth' });
+}
+
+function setSelectedWheelIndex(idx){
+  const clamped = Math.max(0, Math.min(wheelValues.length-1, idx));
+  selectedShotEnd = wheelValues[clamped];
+  Array.from(shotEndWheelTrack.children).forEach((el, i)=>{
+    el.classList.toggle('selected', i===clamped);
+  });
+}
+
+shotEndWheelTrack.addEventListener('scroll', ()=>{
+  // live-update which item looks selected while dragging
+  const idx = Math.round(shotEndWheelTrack.scrollTop / WHEEL_ITEM_H);
+  setSelectedWheelIndex(idx);
+  // snap-correct once scrolling has settled
+  clearTimeout(wheelSnapTimeout);
+  wheelSnapTimeout = setTimeout(()=>{
+    const settledIdx = Math.round(shotEndWheelTrack.scrollTop / WHEEL_ITEM_H);
+    scrollWheelToIndex(settledIdx);
+    setSelectedWheelIndex(settledIdx);
+  }, 90);
+});
 
 const msIsoSlider = document.getElementById('msIso');
 const msApSlider = document.getElementById('msAp');
@@ -763,10 +829,6 @@ function updateSliderLabels(){
 }
 [msIsoSlider, msApSlider, msShSlider].forEach(s=> s.addEventListener('input', updateSliderLabels));
 updateSliderLabels();
-
-function nextShotStart(){
-  return currentRoll ? (currentRoll.loggedShots||0) + 1 : 1;
-}
 
 function refreshEntryFormState(){
   if(!currentRoll) return;
@@ -796,36 +858,15 @@ function refreshEntryFormState(){
   entryFormCard.classList.remove('hidden');
 
   shotStartLabel.textContent = start;
-  shotEndInput.min = start;
-  shotEndInput.max = total;
-  shotEndInput.placeholder = '?';
-  shotEndInput.value = '';
   notesInput.value = '';
-  rangeError.textContent = '';
-  commitBtn.disabled = true;
+  document.getElementById('commitError').textContent = '';
+  commitBtn.disabled = false;
+  buildShotEndWheel();
 }
-
-shotEndInput.addEventListener('input', ()=>{
-  const start = nextShotStart();
-  const total = currentRoll.totalShots;
-  const val = Number(shotEndInput.value);
-  if(!shotEndInput.value){
-    rangeError.textContent = '';
-    commitBtn.disabled = true;
-    return;
-  }
-  if(!Number.isInteger(val) || val < start || val > total){
-    rangeError.textContent = `Enter a shot number between ${start} and ${total}.`;
-    commitBtn.disabled = true;
-  } else {
-    rangeError.textContent = '';
-    commitBtn.disabled = false;
-  }
-});
 
 commitBtn.addEventListener('click', async ()=>{
   const start = nextShotStart();
-  const end = Number(shotEndInput.value);
+  const end = selectedShotEnd;
   if(!end || end < start || end > currentRoll.totalShots) return;
 
   commitBtn.disabled = true;
@@ -845,7 +886,7 @@ commitBtn.addEventListener('click', async ()=>{
     // Note: sliders intentionally keep their values — most consecutive shots
     // share the same settings. Only the shot range and notes reset.
   }catch(e){
-    rangeError.textContent = 'Could not save this entry. Try again.';
+    document.getElementById('commitError').textContent = 'Could not save this entry. Try again.';
     commitBtn.disabled = false;
   }
 });
