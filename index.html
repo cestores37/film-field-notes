@@ -171,7 +171,7 @@
 
   /* ---------------- ROLL DETAIL VIEW ---------------- */
   #detailView .detail-header{padding:calc(1rem + env(safe-area-inset-top)) 0 0 0;}
-  #detailView .detail-header .wrap{display:flex;align-items:center;gap:0.7rem;}
+  #detailView .detail-header .detail-top-row{display:flex;align-items:center;gap:0.7rem;}
   .back-btn{background:none;border:none;color:var(--paper-dim);font-size:1.4rem;padding:0.5rem 0.6rem 0.5rem 0;width:44px;height:44px;display:flex;align-items:center;flex:0 0 auto;}
   .detail-title{flex:1;min-width:0;}
   .detail-title .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.15rem;color:var(--paper);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -203,6 +203,7 @@
   }
   .entry-card{background:var(--panel);border:1px solid var(--hairline);border-radius:12px;padding:1.1rem 1.1rem 1.2rem;}
   .shot-range-row{display:flex;align-items:baseline;gap:0.5rem;font-family:'IBM Plex Mono',monospace;margin-bottom:0.9rem;}
+  .shot-range-row .wheel-picker{margin-left:auto;}
   .shot-range-row .sr-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--metal);}
   .shot-range-row .sr-num{font-size:1.5rem;color:var(--paper);font-weight:600;}
   .shot-range-row .sr-sep{font-size:1.1rem;color:var(--metal);}
@@ -230,7 +231,7 @@
 
   .mini-slider{margin-bottom:0.95rem;}
   .mini-slider .ms-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.4rem;}
-  .mini-slider .ms-name{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--metal);}
+  .ms-name{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--metal);}
   .mini-slider .ms-val{font-family:'IBM Plex Mono',monospace;font-size:1.05rem;color:var(--paper);font-weight:500;}
 
   .exposure-module{margin-top:0.2rem;}
@@ -503,7 +504,7 @@
 <!-- ============ ROLL DETAIL VIEW ============ -->
 <div id="detailView" class="hidden">
   <div class="detail-header">
-    <div class="wrap">
+    <div class="wrap detail-top-row">
       <button class="back-btn" id="backBtn">←</button>
       <div class="detail-title">
         <div class="name" id="detailName">—</div>
