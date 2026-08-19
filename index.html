@@ -202,15 +202,16 @@
     padding:1rem 0 0.9rem 0;
   }
   .entry-card{background:var(--panel);border:1px solid var(--hairline);border-radius:12px;padding:1.1rem 1.1rem 1.2rem;}
-  .dual-dial-row{display:flex;gap:1rem;margin-bottom:1.2rem;}
-  .dial-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;}
-  .dial-label{
-    font-family:'IBM Plex Mono',monospace;font-size:0.74rem;font-weight:600;color:var(--paper);
-    text-align:center;margin-bottom:0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+  .shot-counter-section{margin-bottom:1.2rem;}
+  .shot-counter-row{display:flex;align-items:center;gap:0.75rem;}
+  .shot-current-box{
+    flex:1;background:var(--panel-raised);border:1px solid var(--hairline);border-radius:10px;
+    height:126px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   }
-  .wheel-picker-wide{width:100%;}
-  .wheel-track-text .wheel-item{font-size:0.74rem;font-weight:500;padding:0 0.4rem;text-align:center;}
-  .wheel-track-text .wheel-item.selected{font-size:0.92rem;font-weight:600;}
+  .shot-current-box .scb-num{font-family:'IBM Plex Mono',monospace;font-size:2.4rem;font-weight:600;color:var(--paper);line-height:1;}
+  .shot-current-box .scb-caption{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--metal);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.5rem;}
+  .shot-counter-sep{color:var(--metal);font-size:1.2rem;font-family:'IBM Plex Mono',monospace;flex:0 0 auto;}
+  .shot-counter-row .wheel-picker{flex:1;width:auto;}
   .wheel-picker{
     position:relative;width:5.6rem;height:126px;border-radius:10px;
     background:var(--panel-raised);border:1px solid var(--hairline);overflow:hidden;
@@ -529,24 +530,26 @@
 
       <!-- Active logging form -->
       <div class="entry-card" id="entryFormCard">
-        <div class="dual-dial-row">
-          <div class="dial-col">
-            <div class="dial-label" id="shotDialLabel">Shot 1–</div>
+        <div class="shot-counter-section">
+          <div class="g-eyebrow" style="text-align:center;">Shot counter</div>
+          <div class="shot-counter-row">
+            <div class="shot-current-box">
+              <div class="scb-num" id="shotStartBig">1</div>
+              <div class="scb-caption">current</div>
+            </div>
+            <div class="shot-counter-sep">–</div>
             <div class="wheel-picker" id="shotEndWheel">
               <div class="wheel-track" id="shotEndWheelTrack"></div>
-              <div class="wheel-highlight"></div>
-            </div>
-          </div>
-          <div class="dial-col">
-            <div class="dial-label">Ambient Light</div>
-            <div class="wheel-picker wheel-picker-wide" id="lightWheel">
-              <div class="wheel-track wheel-track-text" id="lightWheelTrack"></div>
               <div class="wheel-highlight"></div>
             </div>
           </div>
         </div>
 
         <div class="exposure-module">
+          <div class="light-row">
+            <span class="ms-name" style="display:block;margin-bottom:0.6rem;">Ambient Light</span>
+            <div class="light-scroll" id="entryLightPills"></div>
+          </div>
 
           <div class="mini-slider" style="margin-top:1.1rem;">
             <div class="ms-head"><span class="ms-name">ISO</span><span class="ms-val" id="msIsoVal">200</span></div>
@@ -1098,7 +1101,7 @@ function openRoll(rollId){
   // default slider ISO to the roll's ISO, and reset ambient light to Sunny for a fresh session
   msIsoSlider.value = isoIndex(roll.iso);
   lightIndex = 1;
-  lightWheel.rebuild(LIGHTING, LIGHTING[lightIndex]);
+  document.querySelectorAll('#entryLightPills .light-pill').forEach((p,i)=> p.classList.toggle('active', i===1));
   updateSliderLabels();
   updateDetailProgressBar();
 
@@ -1204,7 +1207,7 @@ function renderEntries(){
 }
 
 // ---------- sticky entry form ----------
-const shotStartLabel = document.getElementById('shotDialLabel');
+const shotStartLabel = document.getElementById('shotStartBig');
 const commitBtn = document.getElementById('commitBtn');
 const notesInput = document.getElementById('notesInput');
 
@@ -1244,14 +1247,20 @@ const entryNeedle = document.getElementById('entryNeedle');
 const entryMeterLabel = document.getElementById('entryMeterLabel');
 const entryFrameBadge = document.getElementById('entryFrameBadge');
 
-const lightWheel = createWheelPicker(
-  document.getElementById('lightWheelTrack'),
-  (cond)=>{
-    lightIndex = LIGHTING.indexOf(cond);
+const entryLightPillsEl = document.getElementById('entryLightPills');
+LIGHTING.forEach((cond, idx)=>{
+  const pill = document.createElement('div');
+  pill.className = 'light-pill' + (idx===lightIndex ? ' active' : '');
+  pill.textContent = cond.name;
+  pill.addEventListener('click', ()=>{
+    lightIndex = idx;
+    document.querySelectorAll('#entryLightPills .light-pill').forEach(p=>p.classList.remove('active'));
+    pill.classList.add('active');
+    pill.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
     updateExposureMeter();
-  },
-  (cond)=> cond.name
-);
+  });
+  entryLightPillsEl.appendChild(pill);
+});
 
 const SKY_BY_SCENE = {
   day:    ['#3a3530','#5c4a3a'],
@@ -1436,7 +1445,7 @@ function refreshEntryFormState(){
   finishPromptCard.classList.add('hidden');
   entryFormCard.classList.remove('hidden');
 
-  shotStartLabel.textContent = 'Shot ' + start + '–';
+  shotStartLabel.textContent = start;
   notesInput.value = '';
   document.getElementById('commitError').textContent = '';
   commitBtn.disabled = false;
