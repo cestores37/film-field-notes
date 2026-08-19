@@ -258,6 +258,7 @@
     background:var(--panel-raised);border:1px solid var(--hairline);color:var(--paper-dim);
     padding:0.5rem 0.8rem;border-radius:20px;white-space:nowrap;flex:0 0 auto;
   }
+  .light-pill .ev{opacity:0.65;margin-left:0.3rem;font-size:0.66rem;}
   .light-pill.active{background:var(--safelight);border-color:var(--safelight);color:var(--charcoal);font-weight:600;}
 
   .preview-frame{
@@ -1232,9 +1233,12 @@ function renderEntries(){
     card.className = 'kpi-card';
     const t = tsToDate(entry.loggedAt);
     const timeLabel = t ? t.toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '';
+    const rangeLabel = entry.shotStart === entry.shotEnd
+      ? `SHOT ${entry.shotStart}`
+      : `SHOTS ${entry.shotStart}–${entry.shotEnd}`;
     card.innerHTML = `
       <div class="kpi-top">
-        <span class="kpi-range">SHOTS ${entry.shotStart}–${entry.shotEnd}</span>
+        <span class="kpi-range">${rangeLabel}</span>
         <span class="kpi-time">${timeLabel}</span>
       </div>
       <div class="kpi-stats">
@@ -1293,7 +1297,7 @@ const entryLightPillsEl = document.getElementById('entryLightPills');
 LIGHTING.forEach((cond, idx)=>{
   const pill = document.createElement('div');
   pill.className = 'light-pill' + (idx===lightIndex ? ' active' : '');
-  pill.textContent = cond.name;
+  pill.innerHTML = `${cond.name}<span class="ev">${cond.offset>0?'+':''}${cond.offset}</span>`;
   pill.addEventListener('click', ()=>{
     lightIndex = idx;
     document.querySelectorAll('#entryLightPills .light-pill').forEach(p=>p.classList.remove('active'));
