@@ -1113,6 +1113,18 @@ document.getElementById('exportConfirmBtn').addEventListener('click', async ()=>
 });
 
 async function exportSelectedRolls(rollIds){
+  // Open the window synchronously, in direct response to the click, before any
+  // await — this is what keeps it from being treated as a blocked pop-up on
+  // both mobile and desktop browsers.
+  const win = window.open('', '_blank');
+  if(!win){
+    alert('Your browser blocked the export window. Allow pop-ups for this site and try again.');
+    return;
+  }
+  win.document.open();
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Field Notes Export</title><style>body{font-family:Georgia,\'Times New Roman\',serif;color:#555;background:#fff;margin:2rem;}</style></head><body><p>Preparing your export&hellip;</p></body></html>');
+  win.document.close();
+
   const rollsData = allRolls.filter(r=>rollIds.includes(r.id));
   const sections = [];
   for(const roll of rollsData){
@@ -1123,15 +1135,10 @@ async function exportSelectedRolls(rollIds){
     sections.push({ roll, entries });
   }
   const html = buildExportHtml(sections);
-  const win = window.open('', '_blank');
-  if(!win){
-    alert('Your browser blocked the export window. Allow pop-ups for this site and try again.');
-    return;
-  }
   win.document.open();
   win.document.write(html);
   win.document.close();
-  win.onload = () => setTimeout(()=> win.print(), 250);
+  setTimeout(()=> win.print(), 250);
 }
 
 function buildExportHtml(sections){
