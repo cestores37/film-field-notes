@@ -202,10 +202,15 @@
     padding:1rem 0 0.9rem 0;
   }
   .entry-card{background:var(--panel);border:1px solid var(--hairline);border-radius:12px;padding:1.1rem 1.1rem 1.2rem;}
-  .shot-range-row{display:flex;align-items:baseline;justify-content:flex-end;gap:0.5rem;font-family:'IBM Plex Mono',monospace;margin-bottom:0.9rem;}
-  .shot-range-row .sr-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--metal);}
-  .shot-range-row .sr-num{font-size:1.5rem;color:var(--paper);font-weight:600;}
-  .shot-range-row .sr-sep{font-size:1.1rem;color:var(--metal);}
+  .dual-dial-row{display:flex;gap:1rem;margin-bottom:1.2rem;}
+  .dial-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;}
+  .dial-label{
+    font-family:'IBM Plex Mono',monospace;font-size:0.74rem;font-weight:600;color:var(--paper);
+    text-align:center;margin-bottom:0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+  }
+  .wheel-picker-wide{width:100%;}
+  .wheel-track-text .wheel-item{font-size:0.74rem;font-weight:500;padding:0 0.4rem;text-align:center;}
+  .wheel-track-text .wheel-item.selected{font-size:0.92rem;font-weight:600;}
   .wheel-picker{
     position:relative;width:5.6rem;height:126px;border-radius:10px;
     background:var(--panel-raised);border:1px solid var(--hairline);overflow:hidden;
@@ -524,21 +529,24 @@
 
       <!-- Active logging form -->
       <div class="entry-card" id="entryFormCard">
-        <div class="shot-range-row">
-          <span class="sr-label">Shot</span>
-          <span class="sr-num" id="shotStartLabel">1</span>
-          <span class="sr-sep">–</span>
-          <div class="wheel-picker" id="shotEndWheel">
-            <div class="wheel-track" id="shotEndWheelTrack"></div>
-            <div class="wheel-highlight"></div>
+        <div class="dual-dial-row">
+          <div class="dial-col">
+            <div class="dial-label" id="shotDialLabel">Shot 1–</div>
+            <div class="wheel-picker" id="shotEndWheel">
+              <div class="wheel-track" id="shotEndWheelTrack"></div>
+              <div class="wheel-highlight"></div>
+            </div>
+          </div>
+          <div class="dial-col">
+            <div class="dial-label">Ambient Light</div>
+            <div class="wheel-picker wheel-picker-wide" id="lightWheel">
+              <div class="wheel-track wheel-track-text" id="lightWheelTrack"></div>
+              <div class="wheel-highlight"></div>
+            </div>
           </div>
         </div>
 
         <div class="exposure-module">
-          <div class="light-row">
-            <span class="ms-name" style="display:block;margin-bottom:0.6rem;">Ambient Light</span>
-            <div class="light-scroll" id="entryLightPills"></div>
-          </div>
 
           <div class="mini-slider" style="margin-top:1.1rem;">
             <div class="ms-head"><span class="ms-name">ISO</span><span class="ms-val" id="msIsoVal">200</span></div>
@@ -1023,10 +1031,11 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async ()=>
 const WHEEL_ITEM_H = 40;
 
 // Generic dial/wheel picker. Returns a handle with .getValue() and .rebuild(values, initialValue).
-function createWheelPicker(trackEl, onChange){
+function createWheelPicker(trackEl, onChange, labelFn){
   let values = [];
   let selected = null;
   let snapTimeout = null;
+  const getLabel = labelFn || (v => v);
 
   function scrollToIndex(idx, behavior){
     trackEl.scrollTo({ top: idx * WHEEL_ITEM_H, behavior: behavior || 'smooth' });
@@ -1058,7 +1067,7 @@ function createWheelPicker(trackEl, onChange){
     values.forEach((v, i)=>{
       const item = document.createElement('div');
       item.className = 'wheel-item';
-      item.textContent = v;
+      item.textContent = getLabel(v);
       item.addEventListener('click', ()=> scrollToIndex(i));
       trackEl.appendChild(item);
     });
@@ -1089,7 +1098,7 @@ function openRoll(rollId){
   // default slider ISO to the roll's ISO, and reset ambient light to Sunny for a fresh session
   msIsoSlider.value = isoIndex(roll.iso);
   lightIndex = 1;
-  document.querySelectorAll('#entryLightPills .light-pill').forEach((p,i)=> p.classList.toggle('active', i===1));
+  lightWheel.rebuild(LIGHTING, LIGHTING[lightIndex]);
   updateSliderLabels();
   updateDetailProgressBar();
 
@@ -1195,7 +1204,7 @@ function renderEntries(){
 }
 
 // ---------- sticky entry form ----------
-const shotStartLabel = document.getElementById('shotStartLabel');
+const shotStartLabel = document.getElementById('shotDialLabel');
 const commitBtn = document.getElementById('commitBtn');
 const notesInput = document.getElementById('notesInput');
 
@@ -1235,20 +1244,15 @@ const entryNeedle = document.getElementById('entryNeedle');
 const entryMeterLabel = document.getElementById('entryMeterLabel');
 const entryFrameBadge = document.getElementById('entryFrameBadge');
 
-const entryLightPillsEl = document.getElementById('entryLightPills');
-LIGHTING.forEach((cond, idx)=>{
-  const pill = document.createElement('div');
-  pill.className = 'light-pill' + (idx===lightIndex ? ' active' : '');
-  pill.textContent = cond.name;
-  pill.addEventListener('click', ()=>{
-    lightIndex = idx;
-    document.querySelectorAll('#entryLightPills .light-pill').forEach(p=>p.classList.remove('active'));
-    pill.classList.add('active');
-    pill.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+const lightWheel = createWheelPicker(
+  document.getElementById('lightWheelTrack'),
+  (cond)=>{
+    lightIndex = LIGHTING.indexOf(cond);
     updateExposureMeter();
-  });
-  entryLightPillsEl.appendChild(pill);
-});
+  },
+  (cond)=> cond.name
+);
+lightWheel.rebuild(LIGHTING, LIGHTING[lightIndex]);
 
 const SKY_BY_SCENE = {
   day:    ['#3a3530','#5c4a3a'],
@@ -1433,7 +1437,7 @@ function refreshEntryFormState(){
   finishPromptCard.classList.add('hidden');
   entryFormCard.classList.remove('hidden');
 
-  shotStartLabel.textContent = start;
+  shotStartLabel.textContent = 'Shot ' + start + '–';
   notesInput.value = '';
   document.getElementById('commitError').textContent = '';
   commitBtn.disabled = false;
