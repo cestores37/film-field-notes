@@ -333,8 +333,8 @@
   }
   .entries-list{display:flex;flex-direction:column-reverse;gap:0.7rem;}
   .kpi-card{background:var(--panel);border:1px solid var(--hairline);border-radius:10px;padding:0.9rem 1rem 1rem;}
-  .kpi-top{display:flex;justify-content:space-between;align-items:baseline;}
-  .kpi-range{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--metal);letter-spacing:0.04em;}
+  .kpi-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0.4rem 0.6rem;}
+  .kpi-range{font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--metal);letter-spacing:0.04em;flex:1 1 auto;min-width:0;}
   .kpi-time{font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--metal);}
   .kpi-stats{display:flex;gap:0.5rem;margin-top:0.7rem;}
   .kpi-stat{flex:1;text-align:center;background:var(--panel-raised);border:1px solid var(--hairline);border-radius:8px;padding:0.55rem 0.3rem;}
@@ -1236,9 +1236,10 @@ function renderEntries(){
     const rangeLabel = entry.shotStart === entry.shotEnd
       ? `SHOT ${entry.shotStart}`
       : `SHOTS ${entry.shotStart}–${entry.shotEnd}`;
+    const rangeLabelWithLight = entry.light ? `${rangeLabel} – ${entry.light}` : rangeLabel;
     card.innerHTML = `
       <div class="kpi-top">
-        <span class="kpi-range">${rangeLabel}</span>
+        <span class="kpi-range">${rangeLabelWithLight}</span>
         <span class="kpi-time">${timeLabel}</span>
       </div>
       <div class="kpi-stats">
@@ -1515,6 +1516,7 @@ commitBtn.addEventListener('click', async ()=>{
       iso: ISO[msIsoSlider.value],
       aperture: AP[msApSlider.value],
       shutter: fmtShutter(msShSlider.value),
+      light: LIGHTING[lightIndex].name,
       notes: notesInput.value.trim(),
       loggedAt: serverTimestamp()
     });
