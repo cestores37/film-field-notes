@@ -198,10 +198,8 @@
 
   .tag.swap-tag{color:var(--mint);border-color:rgba(143,227,192,0.35);}
 
-  .sticky-entry{
-    position:sticky;top:0;z-index:20;background:var(--charcoal);
-    padding:calc(0.8rem + env(safe-area-inset-top)) 0 0.9rem 0;
-    box-shadow:0 10px 14px -10px rgba(0,0,0,0.6);
+  .entry-section{
+    padding:1rem 0 0.9rem 0;
   }
   .entry-card{background:var(--panel);border:1px solid var(--hairline);border-radius:12px;padding:1.1rem 1.1rem 1.2rem;}
   .shot-range-row{display:flex;align-items:baseline;gap:0.5rem;font-family:'IBM Plex Mono',monospace;margin-bottom:0.9rem;}
@@ -234,6 +232,50 @@
   .mini-slider .ms-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.4rem;}
   .mini-slider .ms-name{font-family:'IBM Plex Mono',monospace;font-size:0.66rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--metal);}
   .mini-slider .ms-val{font-family:'IBM Plex Mono',monospace;font-size:1.05rem;color:var(--paper);font-weight:500;}
+
+  .exposure-module{margin-top:0.2rem;}
+  .light-scroll{
+    display:flex;gap:0.5rem;overflow-x:auto;padding-bottom:0.2rem;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  }
+  .light-scroll::-webkit-scrollbar{display:none;}
+  .light-pill{
+    font-family:'IBM Plex Mono',monospace;font-size:0.72rem;
+    background:var(--panel-raised);border:1px solid var(--hairline);color:var(--paper-dim);
+    padding:0.5rem 0.8rem;border-radius:20px;white-space:nowrap;flex:0 0 auto;
+  }
+  .light-pill.active{background:var(--safelight);border-color:var(--safelight);color:var(--charcoal);font-weight:600;}
+
+  .preview-frame{
+    background:#000;border-radius:10px;overflow:hidden;position:relative;aspect-ratio:4/3;
+    border:1px solid var(--hairline);
+  }
+  #entrySceneFilter{width:100%;height:100%;display:block;transition:filter 0.15s ease;}
+  .grain-canvas{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:overlay;pointer-events:none;}
+  .frame-badge{
+    position:absolute;bottom:0.5rem;left:0.5rem;right:0.5rem;font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
+    color:rgba(237,230,214,0.85);background:rgba(0,0,0,0.45);padding:0.28rem 0.5rem;border-radius:4px;
+    letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  .meter-track{
+    position:relative;height:44px;background:var(--panel-raised);border-radius:8px;border:1px solid var(--hairline);
+    overflow:hidden;
+  }
+  .meter-ticks{position:absolute;inset:0;display:flex;}
+  .meter-ticks div{flex:1;border-right:1px solid var(--hairline);}
+  .meter-ticks div:last-child{border-right:none;}
+  .meter-needle{
+    position:absolute;bottom:5px;left:50%;width:3px;height:28px;background:var(--sage);
+    transform-origin:bottom center;transition:transform 0.18s ease, background 0.18s ease;border-radius:3px;
+  }
+  .meter-center-mark{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--metal);opacity:0.5;}
+  .meter-label{
+    margin-top:0.5rem;font-family:'IBM Plex Mono',monospace;font-size:0.8rem;text-align:center;
+    letter-spacing:0.02em;color:var(--paper);
+  }
+  .meter-label .n{color:var(--safelight);}
+  .meter-label.correct .n{color:var(--sage);}
   input[type=range]{
     -webkit-appearance:none;appearance:none;width:100%;height:5px;background:var(--hairline);border-radius:3px;outline:none;
     touch-action:pan-y;
@@ -469,9 +511,15 @@
       </div>
       <button class="swap-film-btn" id="swapFilmBtn">Swap Film</button>
     </div>
+    <div class="wrap">
+      <div class="rc-progress" style="margin-top:0.9rem;">
+        <div class="bar-track"><div class="bar-fill" id="detailBarFill" style="width:0%;"></div></div>
+        <div class="bar-label" id="detailBarLabel">0 / 0 shots logged</div>
+      </div>
+    </div>
   </div>
 
-  <div class="sticky-entry">
+  <div class="entry-section">
     <div class="wrap">
 
       <!-- Active logging form -->
@@ -486,20 +534,42 @@
           </div>
         </div>
 
-        <div class="mini-slider">
-          <div class="ms-head"><span class="ms-name">ISO</span><span class="ms-val" id="msIsoVal">200</span></div>
-          <input type="range" id="msIso" min="0" max="6" step="1" value="1">
-        </div>
-        <div class="mini-slider">
-          <div class="ms-head"><span class="ms-name">Aperture</span><span class="ms-val" id="msApVal">f/8</span></div>
-          <input type="range" id="msAp" min="0" max="8" step="1" value="5">
-        </div>
-        <div class="mini-slider" style="margin-bottom:0.2rem;">
-          <div class="ms-head"><span class="ms-name">Shutter Speed</span><span class="ms-val" id="msShVal">1/125s</span></div>
-          <input type="range" id="msSh" min="0" max="10" step="1" value="3">
+        <div class="exposure-module">
+          <div class="light-row">
+            <span class="ms-name" style="display:block;margin-bottom:0.6rem;">Ambient Light</span>
+            <div class="light-scroll" id="entryLightPills"></div>
+          </div>
+
+          <div class="mini-slider" style="margin-top:1.1rem;">
+            <div class="ms-head"><span class="ms-name">ISO</span><span class="ms-val" id="msIsoVal">200</span></div>
+            <input type="range" id="msIso" min="0" max="6" step="1" value="1">
+          </div>
+          <div class="mini-slider">
+            <div class="ms-head"><span class="ms-name">Aperture</span><span class="ms-val" id="msApVal">f/8</span></div>
+            <input type="range" id="msAp" min="0" max="8" step="1" value="5">
+          </div>
+          <div class="mini-slider" style="margin-bottom:0.2rem;">
+            <div class="ms-head"><span class="ms-name">Shutter Speed</span><span class="ms-val" id="msShVal">1/125s</span></div>
+            <input type="range" id="msSh" min="0" max="10" step="1" value="3">
+          </div>
+
+          <div class="preview-frame" style="margin-top:1.1rem;">
+            <svg id="entrySceneFilter" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg"></svg>
+            <canvas class="grain-canvas" id="entryGrainCanvas" width="400" height="300"></canvas>
+            <div class="frame-badge" id="entryFrameBadge">Sunny · ISO 200 · f/8 · 1/125s</div>
+          </div>
+
+          <div class="meter" style="margin-top:0.85rem;">
+            <div class="meter-track">
+              <div class="meter-ticks"><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+              <div class="meter-center-mark"></div>
+              <div class="meter-needle" id="entryNeedle"></div>
+            </div>
+            <div class="meter-label" id="entryMeterLabel">Correctly exposed</div>
+          </div>
         </div>
 
-        <label style="font-family:'IBM Plex Mono',monospace;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--metal);display:block;margin-top:0.9rem;">Notes (optional)</label>
+        <label style="font-family:'IBM Plex Mono',monospace;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--metal);display:block;margin-top:1.1rem;">Notes (optional)</label>
         <textarea class="notes-field" id="notesInput" rows="2" placeholder="Lighting, subject, mood..."></textarea>
 
         <button class="commit-btn" id="commitBtn" disabled>Commit Settings</button>
@@ -562,6 +632,26 @@ const AP  = [1.4,2,2.8,4,5.6,8,11,16,22];
 const SH_DENOM = [1000,500,250,125,60,30,15,8,4,2,1];
 function fmtShutter(i){ const d = SH_DENOM[i]; return d===1 ? '1' : ('1/'+d); }
 function isoIndex(val){ const i = ISO.indexOf(val); return i===-1 ? 1 : i; }
+
+// Exposure model, ported from the standalone tool: light conditions expressed
+// as stops relative to Sunny 16 (ISO 100, f/16, 1/125s = 0 stops).
+const LIGHTING = [
+  {name:'Bright Sun / Snow', offset: 1,  scene:'day'},
+  {name:'Sunny',             offset: 0,  scene:'day'},
+  {name:'Hazy / Soft Sun',   offset:-1,  scene:'day'},
+  {name:'Overcast',          offset:-2,  scene:'day'},
+  {name:'Open Shade',        offset:-3,  scene:'day'},
+  {name:'Bright Indoor',     offset:-5,  scene:'indoor'},
+  {name:'Typical Indoor',    offset:-7,  scene:'indoor'},
+  {name:'Dim Indoor / Bar',  offset:-9,  scene:'dim'},
+  {name:'Night / City Lights', offset:-12, scene:'night'}
+];
+let lightIndex = 1; // default: Sunny
+
+const isoBase = 0;
+const apBase  = AP.indexOf(16);
+const shBase  = SH_DENOM.indexOf(125);
+const offsetConst = -(isoBase - apBase + shBase);
 
 // ---------- view elements ----------
 const loginView = document.getElementById('loginView');
@@ -996,9 +1086,12 @@ function openRoll(rollId){
   document.getElementById('detailName').textContent = roll.nickname;
   document.getElementById('detailMeta').textContent = `ISO ${roll.iso} · ${roll.filmType==='bw'?'B&W':'Color'} · ${roll.totalShots} shots`;
 
-  // default slider ISO to the roll's ISO
+  // default slider ISO to the roll's ISO, and reset ambient light to Sunny for a fresh session
   msIsoSlider.value = isoIndex(roll.iso);
+  lightIndex = 1;
+  document.querySelectorAll('#entryLightPills .light-pill').forEach((p,i)=> p.classList.toggle('active', i===1));
   updateSliderLabels();
+  updateDetailProgressBar();
 
   showView(detailView);
 
@@ -1007,12 +1100,22 @@ function openRoll(rollId){
   const q = query(entriesRef, orderBy('shotStart', 'asc'));
   unsubEntries = onSnapshot(q, (snap)=>{
     currentEntries = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-    // keep local roll's loggedShots in sync for the sticky form logic
+    // keep local roll's loggedShots in sync for the entry form logic
     const lastEnd = currentEntries.length ? currentEntries[currentEntries.length-1].shotEnd : 0;
     currentRoll.loggedShots = lastEnd;
     renderEntries();
     refreshEntryFormState();
+    updateDetailProgressBar();
   });
+}
+
+function updateDetailProgressBar(){
+  if(!currentRoll) return;
+  const logged = currentRoll.loggedShots || 0;
+  const total = currentRoll.totalShots || 0;
+  const pct = total ? Math.min(100, Math.round((logged/total)*100)) : 0;
+  document.getElementById('detailBarFill').style.width = pct + '%';
+  document.getElementById('detailBarLabel').textContent = `${logged} / ${total} shots logged`;
 }
 
 // ---------- swap film ----------
@@ -1052,6 +1155,7 @@ confirmSwapBtn.addEventListener('click', async ()=>{
     currentRoll.loggedShots = val;
     currentRoll.swappedAt = { seconds: Math.floor(Date.now()/1000) };
     refreshEntryFormState();
+    updateDetailProgressBar();
     swapFilmModal.classList.add('hidden');
     rewindModal.classList.remove('hidden');
   }catch(e){
@@ -1124,10 +1228,180 @@ const msIsoVal = document.getElementById('msIsoVal');
 const msApVal = document.getElementById('msApVal');
 const msShVal = document.getElementById('msShVal');
 
+const entryScene = document.getElementById('entrySceneFilter');
+const entryGrainCanvas = document.getElementById('entryGrainCanvas');
+const entryGctx = entryGrainCanvas.getContext('2d');
+const entryNeedle = document.getElementById('entryNeedle');
+const entryMeterLabel = document.getElementById('entryMeterLabel');
+const entryFrameBadge = document.getElementById('entryFrameBadge');
+
+const entryLightPillsEl = document.getElementById('entryLightPills');
+LIGHTING.forEach((cond, idx)=>{
+  const pill = document.createElement('div');
+  pill.className = 'light-pill' + (idx===lightIndex ? ' active' : '');
+  pill.textContent = cond.name;
+  pill.addEventListener('click', ()=>{
+    lightIndex = idx;
+    document.querySelectorAll('#entryLightPills .light-pill').forEach(p=>p.classList.remove('active'));
+    pill.classList.add('active');
+    pill.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+    updateExposureMeter();
+  });
+  entryLightPillsEl.appendChild(pill);
+});
+
+const SKY_BY_SCENE = {
+  day:    ['#3a3530','#5c4a3a'],
+  indoor: ['#2e2a26','#463c30'],
+  dim:    ['#241f1c','#332419'],
+  night:  ['#131211','#1c2230']
+};
+
+function buildExposureScene(apIndex, shIndex, sceneType){
+  entryScene.innerHTML = '';
+  const NS = 'http://www.w3.org/2000/svg';
+  const openness = 1 - (apIndex/(AP.length-1));
+  const bgBlur = (openness*7).toFixed(1);
+  const sky = SKY_BY_SCENE[sceneType] || SKY_BY_SCENE.day;
+  const defs = document.createElementNS(NS,'defs');
+  defs.innerHTML = `<filter id="entryBgBlur"><feGaussianBlur stdDeviation="${bgBlur}"/></filter>
+    <linearGradient id="entrySkyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${sky[0]}"/><stop offset="100%" stop-color="${sky[1]}"/>
+    </linearGradient>`;
+  entryScene.appendChild(defs);
+
+  const skyRect = document.createElementNS(NS,'rect');
+  skyRect.setAttribute('x',0);skyRect.setAttribute('y',0);skyRect.setAttribute('width',400);skyRect.setAttribute('height',300);
+  skyRect.setAttribute('fill','url(#entrySkyGrad)');
+  entryScene.appendChild(skyRect);
+
+  if(sceneType==='day'){
+    const sun = document.createElementNS(NS,'circle');
+    sun.setAttribute('cx',320);sun.setAttribute('cy',60);sun.setAttribute('r',26);
+    sun.setAttribute('fill','#e8592b');sun.setAttribute('opacity','0.85');
+    sun.setAttribute('filter','url(#entryBgBlur)');
+    entryScene.appendChild(sun);
+  } else if(sceneType==='indoor'){
+    const win = document.createElementNS(NS,'rect');
+    win.setAttribute('x',280);win.setAttribute('y',30);win.setAttribute('width',80);win.setAttribute('height',110);
+    win.setAttribute('rx',3);win.setAttribute('fill','#c9a876');win.setAttribute('opacity','0.55');
+    win.setAttribute('filter','url(#entryBgBlur)');
+    entryScene.appendChild(win);
+  } else if(sceneType==='dim'){
+    const lamp = document.createElementNS(NS,'circle');
+    lamp.setAttribute('cx',300);lamp.setAttribute('cy',70);lamp.setAttribute('r',34);
+    lamp.setAttribute('fill','#e8a04a');lamp.setAttribute('opacity','0.35');
+    lamp.setAttribute('filter','url(#entryBgBlur)');
+    entryScene.appendChild(lamp);
+    const bulb = document.createElementNS(NS,'circle');
+    bulb.setAttribute('cx',300);bulb.setAttribute('cy',70);bulb.setAttribute('r',7);
+    bulb.setAttribute('fill','#f2c98a');bulb.setAttribute('filter','url(#entryBgBlur)');
+    entryScene.appendChild(bulb);
+  } else if(sceneType==='night'){
+    for(let i=0;i<6;i++){
+      const dot = document.createElementNS(NS,'rect');
+      dot.setAttribute('x', 40 + i*58);
+      dot.setAttribute('y', 40 + (i%2)*20);
+      dot.setAttribute('width', 6);dot.setAttribute('height', 6);
+      dot.setAttribute('fill','#f2c98a');dot.setAttribute('opacity','0.8');
+      dot.setAttribute('filter','url(#entryBgBlur)');
+      entryScene.appendChild(dot);
+    }
+  }
+
+  const mtGroup = document.createElementNS(NS,'g');
+  mtGroup.setAttribute('filter','url(#entryBgBlur)');
+  const mtColors = sceneType==='day'
+    ? ['#4a4238','#5c5347','#463f36']
+    : ['#2c2824','#332e28','#231f1c'];
+  const mt1 = document.createElementNS(NS,'polygon');
+  mt1.setAttribute('points','0,220 90,120 180,220');
+  mt1.setAttribute('fill',mtColors[0]);
+  const mt2 = document.createElementNS(NS,'polygon');
+  mt2.setAttribute('points','120,220 240,90 360,220');
+  mt2.setAttribute('fill',mtColors[1]);
+  const mt3 = document.createElementNS(NS,'polygon');
+  mt3.setAttribute('points','260,220 400,140 400,220');
+  mt3.setAttribute('fill',mtColors[2]);
+  mtGroup.appendChild(mt1);mtGroup.appendChild(mt2);mtGroup.appendChild(mt3);
+  entryScene.appendChild(mtGroup);
+
+  const ground = document.createElementNS(NS,'rect');
+  ground.setAttribute('x',0);ground.setAttribute('y',220);ground.setAttribute('width',400);ground.setAttribute('height',80);
+  ground.setAttribute('fill','#3a352f');
+  entryScene.appendChild(ground);
+
+  const trailLen = (shIndex/(SH_DENOM.length-1))*90;
+  if(trailLen>2){
+    const trail = document.createElementNS(NS,'rect');
+    trail.setAttribute('x', 170-trailLen);
+    trail.setAttribute('y', 205);
+    trail.setAttribute('width', trailLen+18);
+    trail.setAttribute('height', 22);
+    trail.setAttribute('rx', 11);
+    trail.setAttribute('fill', '#ede6d6');
+    trail.setAttribute('opacity', 0.28);
+    entryScene.appendChild(trail);
+  }
+  const subject = document.createElementNS(NS,'circle');
+  subject.setAttribute('cx',188);subject.setAttribute('cy',216);subject.setAttribute('r',12);
+  subject.setAttribute('fill','#ede6d6');
+  entryScene.appendChild(subject);
+
+  const post = document.createElementNS(NS,'rect');
+  post.setAttribute('x',60);post.setAttribute('y',150);post.setAttribute('width',6);post.setAttribute('height',80);
+  post.setAttribute('fill','#ede6d6');post.setAttribute('opacity','0.9');
+  entryScene.appendChild(post);
+}
+
+function drawEntryGrain(intensity){
+  const w = entryGrainCanvas.width, h = entryGrainCanvas.height;
+  const imgData = entryGctx.createImageData(w,h);
+  const amt = intensity;
+  for(let i=0;i<imgData.data.length;i+=4){
+    const n = (Math.random()*255*amt);
+    imgData.data[i]=n;imgData.data[i+1]=n;imgData.data[i+2]=n;
+    imgData.data[i+3]= amt>0.02 ? 40*amt/0.55 : 0;
+  }
+  entryGctx.putImageData(imgData,0,0);
+}
+
+function updateExposureMeter(){
+  const i_iso = Number(msIsoSlider.value);
+  const i_ap = Number(msApSlider.value);
+  const i_sh = Number(msShSlider.value);
+  const cond = LIGHTING[lightIndex];
+
+  entryFrameBadge.textContent = `${cond.name} · ISO ${ISO[i_iso]} · f/${AP[i_ap]} · ${fmtShutter(i_sh)}s`;
+
+  const offset = i_iso - i_ap + i_sh + offsetConst + cond.offset;
+  const clampedOffset = Math.max(-3, Math.min(3, offset));
+  entryNeedle.style.transform = `translateX(-50%) rotate(${clampedOffset*20}deg)`;
+  entryNeedle.style.background = Math.abs(offset)<0.5 ? 'var(--sage)' : 'var(--safelight)';
+
+  if(offset===0){
+    entryMeterLabel.innerHTML = 'Correctly exposed';
+    entryMeterLabel.classList.add('correct');
+  } else if(offset>0){
+    entryMeterLabel.innerHTML = `Overexposed by <span class="n">+${offset}</span> stop${Math.abs(offset)===1?'':'s'}`;
+    entryMeterLabel.classList.remove('correct');
+  } else {
+    entryMeterLabel.innerHTML = `Underexposed by <span class="n">${offset}</span> stop${Math.abs(offset)===1?'':'s'}`;
+    entryMeterLabel.classList.remove('correct');
+  }
+
+  const brightness = Math.max(0.12, Math.min(3.2, 1 + offset*0.22));
+  entryScene.parentElement.style.filter = `brightness(${brightness})`;
+
+  buildExposureScene(i_ap, i_sh, cond.scene);
+  drawEntryGrain(Math.max(0, i_iso/(ISO.length-1)));
+}
+
 function updateSliderLabels(){
   msIsoVal.textContent = ISO[msIsoSlider.value];
   msApVal.textContent = 'f/' + AP[msApSlider.value];
   msShVal.textContent = fmtShutter(msShSlider.value) + 's';
+  updateExposureMeter();
 }
 [msIsoSlider, msApSlider, msShSlider].forEach(s=> s.addEventListener('input', updateSliderLabels));
 updateSliderLabels();
